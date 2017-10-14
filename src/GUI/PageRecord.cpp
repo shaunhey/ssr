@@ -142,12 +142,18 @@ PageRecord::PageRecord(MainWindow* main_window)
 	m_input_started = false;
 	m_output_started = false;
 	m_previewing = false;
+	m_start_pending = false;
 
 	m_last_error_sound = std::numeric_limits<int64_t>::min();
 
 	QGroupBox *groupbox_recording = new QGroupBox(tr("Recording"), this);
 	{
 		m_pushbutton_start_pause = new QPushButton(groupbox_recording);
+
+		m_checkbox_start_delay = new QCheckBox(tr("Start Delay:"), groupbox_recording);
+		m_lineedit_start_delay = new QLineEdit("00:00:00", groupbox_recording);
+		m_lineedit_start_delay->setInputMask("99:99:99");
+		m_lineedit_start_delay->setDisabled(true);
 
 		m_checkbox_hotkey_enable = new QCheckBox(tr("Enable recording hotkey"), groupbox_recording);
 		m_checkbox_sound_notifications_enable = new QCheckBox(tr("Enable sound notifications"), groupbox_recording);
@@ -166,6 +172,7 @@ PageRecord::PageRecord(MainWindow* main_window)
 		}
 
 		connect(m_pushbutton_start_pause, SIGNAL(clicked()), this, SLOT(OnRecordStartPause()));
+		connect(m_checkbox_start_delay, SIGNAL(clicked()), this, SLOT(OnUpdateStartDelayEnabled()));
 		connect(m_checkbox_hotkey_enable, SIGNAL(clicked()), this, SLOT(OnUpdateHotkeyFields()));
 		connect(m_checkbox_sound_notifications_enable, SIGNAL(clicked()), this, SLOT(OnUpdateSoundNotifications()));
 		connect(m_checkbox_hotkey_ctrl, SIGNAL(clicked()), this, SLOT(OnUpdateHotkey()));
@@ -176,6 +183,13 @@ PageRecord::PageRecord(MainWindow* main_window)
 
 		QVBoxLayout *layout = new QVBoxLayout(groupbox_recording);
 		layout->addWidget(m_pushbutton_start_pause);
+		{
+			QHBoxLayout *layout2 = new QHBoxLayout();
+			layout->addLayout(layout2);
+
+			layout2->addWidget(m_checkbox_start_delay);
+			layout2->addWidget(m_lineedit_start_delay);
+		}
 		{
 			QHBoxLayout *layout2 = new QHBoxLayout();
 			layout->addLayout(layout2);
@@ -352,6 +366,11 @@ PageRecord::PageRecord(MainWindow* main_window)
 
 	m_timer_update_info = new QTimer(this);
 	connect(m_timer_update_info, SIGNAL(timeout()), this, SLOT(OnUpdateInformation()));
+
+	m_timer_start_delay = new QTimer(this);
+	m_timer_start_delay->setSingleShot(true);
+	connect(m_timer_start_delay, SIGNAL(timeout()), this, SLOT(OnStartDelayElapsed()));
+
 	connect(&m_hotkey_start_pause, SIGNAL(Triggered()), this, SLOT(OnRecordStartPause()), Qt::QueuedConnection);
 	connect(Logger::GetInstance(), SIGNAL(NewLine(Logger::enum_type,QString)), this, SLOT(OnNewLogLine(Logger::enum_type,QString)), Qt::QueuedConnection);
 
@@ -623,6 +642,13 @@ void PageRecord::StopPage(bool save) {
 #if SSR_USE_JACK
 	m_jack_input.reset();
 #endif
+
+	if (m_start_pending) {
+		Logger::LogInfo("[PageRecord::StopPage] " + tr("Cancelling delayed start"));
+		m_timer_start_delay->stop();
+		m_start_pending = false;
+		UpdateRecordPauseButton();
+	}
 
 	Logger::LogInfo("[PageRecord::StopPage] " + tr("Stopped page."));
 
@@ -938,6 +964,10 @@ void PageRecord::UpdateRecordPauseButton() {
 	if(m_output_started) {
 		m_pushbutton_start_pause->setIcon(g_icon_pause);
 		m_pushbutton_start_pause->setText(tr("Pause recording"));
+	} else if (m_start_pending) {
+		m_pushbutton_start_pause->setIcon(g_icon_cancel);
+		m_pushbutton_start_pause->setText(tr("Starting in %1...").arg(
+			QTime(0,0).addMSecs(m_timer_start_delay->interval() - m_time_start_delay_started.elapsed()).toString("hh:mm:ss")));
 	} else {
 		m_pushbutton_start_pause->setIcon(g_icon_record);
 		m_pushbutton_start_pause->setText(tr("Start recording"));
@@ -988,6 +1018,11 @@ void PageRecord::OnUpdateSoundNotifications() {
 	}
 }
 
+void PageRecord::OnUpdateStartDelayEnabled()
+{
+	m_lineedit_start_delay->setDisabled(!m_checkbox_start_delay->isChecked());	
+}
+
 void PageRecord::OnRecordStartPause() {
 	if(QApplication::activeModalWidget() != NULL || QApplication::activePopupWidget() != NULL)
 		return;
@@ -995,8 +1030,31 @@ void PageRecord::OnRecordStartPause() {
 		return;
 	if(m_wait_saving)
 		return;
+	
+	if(m_start_pending) {
+		if (MessageBox(QMessageBox::Warning, this, MainWindow::WINDOW_CAPTION, tr("Cancel delayed start?"), BUTTON_YES | BUTTON_NO, BUTTON_YES) != BUTTON_YES) {
+			return;
+		}
+		m_timer_start_delay->stop();
+		m_start_pending = false;
+		UpdateRecordPauseButton();
+		Logger::LogInfo("[PageRecord::OnRecordStartPause] " + tr("Delayed start cancelled"));
+		return;
+	}
+
 	if(m_output_started) {
 		StopOutput(false);
+	} else if (m_checkbox_start_delay->isChecked()) {
+		QTime t = QTime::fromString(m_lineedit_start_delay->text(), "hh:mm:ss");
+		if (!t.isValid()) {
+			MessageBox(QMessageBox::Warning, this, MainWindow::WINDOW_CAPTION, tr("Invalid delay start value"), BUTTON_OK);
+			return;
+		}
+		Logger::LogInfo("[PageRecord::OnRecordStartPause] " + tr("Starting recording in %1...").arg(t.toString("hh:mm:ss")));
+		m_start_pending = true;
+		m_time_start_delay_started.start();
+		m_timer_start_delay->start(QTime(0,0).msecsTo(t));
+		UpdateRecordPauseButton();
 	} else {
 		StartOutput();
 	}
@@ -1114,6 +1172,10 @@ void PageRecord::OnUpdateInformation() {
 			}
 		}
 
+		if (m_start_pending) {
+			UpdateRecordPauseButton();
+		}
+
 	} else {
 
 		m_label_info_total_time->clear();
@@ -1164,4 +1226,11 @@ void PageRecord::OnNewLogLine(Logger::enum_type type, QString string) {
 	if(should_scroll)
 		m_textedit_log->verticalScrollBar()->setValue(m_textedit_log->verticalScrollBar()->maximum());
 
+}
+
+void PageRecord::OnStartDelayElapsed()
+{
+	Logger::LogInfo("[PageRecord::OnStartDelayElapsed] " + tr("Timer elapsed, begin recording"));
+	m_start_pending = false;
+	StartOutput();
 }

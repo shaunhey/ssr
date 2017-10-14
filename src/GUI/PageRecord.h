@@ -56,7 +56,7 @@ private:
 private:
 	MainWindow *m_main_window;
 
-	bool m_page_started, m_input_started, m_output_started, m_previewing;
+	bool m_page_started, m_input_started, m_output_started, m_previewing, m_start_pending;
 	bool m_recorded_something, m_wait_saving, m_error_occurred;
 
 	PageInput::enum_video_area m_video_area;
@@ -97,6 +97,9 @@ private:
 
 	QPushButton *m_pushbutton_start_pause;
 
+	QCheckBox *m_checkbox_start_delay;
+	QLineEdit *m_lineedit_start_delay;
+
 	QCheckBox *m_checkbox_hotkey_enable, *m_checkbox_sound_notifications_enable;
 	QCheckBox *m_checkbox_hotkey_ctrl, *m_checkbox_hotkey_shift, *m_checkbox_hotkey_alt, *m_checkbox_hotkey_super;
 	QComboBox *m_combobox_hotkey_key;
@@ -119,7 +122,8 @@ private:
 	QAction *m_systray_action_start_pause, *m_systray_action_cancel, *m_systray_action_save;
 	QAction *m_systray_action_show_hide, *m_systray_action_quit;
 
-	QTimer *m_timer_update_info;
+	QTimer *m_timer_update_info, *m_timer_start_delay;
+	QTime m_time_start_delay_started;
 
 public:
 	PageRecord(MainWindow* main_window);
@@ -173,6 +177,7 @@ public slots:
 	void OnUpdateHotkeyFields();
 	void OnUpdateHotkey();
 	void OnUpdateSoundNotifications();
+	void OnUpdateStartDelayEnabled();
 
 private slots:
 	void OnRecordStartPause();
@@ -183,4 +188,5 @@ private slots:
 	void OnUpdateInformation();
 	void OnNewLogLine(Logger::enum_type type, QString string);
 
+	void OnStartDelayElapsed();
 };

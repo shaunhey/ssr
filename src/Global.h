@@ -52,6 +52,7 @@ along with SimpleScreenRecorder.  If not, see <http://www.gnu.org/licenses/>.
 #include <QSpinBox>
 #include <QSplitter>
 #include <QTextBrowser>
+#include <QTime>
 
 #include <QGridLayout>
 #include <QHBoxLayout>
