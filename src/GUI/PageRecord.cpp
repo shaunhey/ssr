@@ -154,6 +154,11 @@ PageRecord::PageRecord(MainWindow* main_window)
 		m_lineedit_start_delay = new QLineEdit("00:00:00", groupbox_recording);
 		m_lineedit_start_delay->setInputMask("99:99:99");
 		m_lineedit_start_delay->setDisabled(true);
+		
+		m_checkbox_duration = new QCheckBox(tr("Duration:"), groupbox_recording);
+		m_lineedit_duration = new QLineEdit("00:00:00", groupbox_recording);
+		m_lineedit_duration->setInputMask("99:99:99");
+		m_lineedit_duration->setDisabled(true);
 
 		m_checkbox_hotkey_enable = new QCheckBox(tr("Enable recording hotkey"), groupbox_recording);
 		m_checkbox_sound_notifications_enable = new QCheckBox(tr("Enable sound notifications"), groupbox_recording);
@@ -173,6 +178,7 @@ PageRecord::PageRecord(MainWindow* main_window)
 
 		connect(m_pushbutton_start_pause, SIGNAL(clicked()), this, SLOT(OnRecordStartPause()));
 		connect(m_checkbox_start_delay, SIGNAL(clicked()), this, SLOT(OnUpdateStartDelayEnabled()));
+		connect(m_checkbox_duration, SIGNAL(clicked()), this, SLOT(OnUpdateDurationEnabled()));
 		connect(m_checkbox_hotkey_enable, SIGNAL(clicked()), this, SLOT(OnUpdateHotkeyFields()));
 		connect(m_checkbox_sound_notifications_enable, SIGNAL(clicked()), this, SLOT(OnUpdateSoundNotifications()));
 		connect(m_checkbox_hotkey_ctrl, SIGNAL(clicked()), this, SLOT(OnUpdateHotkey()));
@@ -189,6 +195,9 @@ PageRecord::PageRecord(MainWindow* main_window)
 
 			layout2->addWidget(m_checkbox_start_delay);
 			layout2->addWidget(m_lineedit_start_delay);
+
+			layout2->addWidget(m_checkbox_duration);
+			layout2->addWidget(m_lineedit_duration);
 		}
 		{
 			QHBoxLayout *layout2 = new QHBoxLayout();
@@ -1023,6 +1032,11 @@ void PageRecord::OnUpdateStartDelayEnabled()
 	m_lineedit_start_delay->setDisabled(!m_checkbox_start_delay->isChecked());	
 }
 
+void PageRecord::OnUpdateDurationEnabled()
+{
+	m_lineedit_duration->setDisabled(!m_checkbox_duration->isChecked());
+}
+
 void PageRecord::OnRecordStartPause() {
 	if(QApplication::activeModalWidget() != NULL || QApplication::activePopupWidget() != NULL)
 		return;
@@ -1174,6 +1188,16 @@ void PageRecord::OnUpdateInformation() {
 
 		if (m_start_pending) {
 			UpdateRecordPauseButton();
+		}
+
+		if (m_output_started && m_checkbox_duration->isChecked()) {
+			QTime t = QTime::fromString(m_lineedit_duration->text(), "hh:mm:ss");
+			if (t.isValid()) {
+				if ((total_time + 500000) / 1000000 >= QTime(0,0).secsTo(t)) {
+					Logger::LogInfo("[PageRecord::OnUpdateInformation] " + tr("Recording duration elapsed"));
+					StopOutput(false);
+				}
+			}
 		}
 
 	} else {

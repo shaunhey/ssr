@@ -97,8 +97,8 @@ private:
 
 	QPushButton *m_pushbutton_start_pause;
 
-	QCheckBox *m_checkbox_start_delay;
-	QLineEdit *m_lineedit_start_delay;
+	QCheckBox *m_checkbox_start_delay, *m_checkbox_duration;
+	QLineEdit *m_lineedit_start_delay, *m_lineedit_duration;
 
 	QCheckBox *m_checkbox_hotkey_enable, *m_checkbox_sound_notifications_enable;
 	QCheckBox *m_checkbox_hotkey_ctrl, *m_checkbox_hotkey_shift, *m_checkbox_hotkey_alt, *m_checkbox_hotkey_super;
@@ -178,6 +178,7 @@ public slots:
 	void OnUpdateHotkey();
 	void OnUpdateSoundNotifications();
 	void OnUpdateStartDelayEnabled();
+	void OnUpdateDurationEnabled();
 
 private slots:
 	void OnRecordStartPause();
